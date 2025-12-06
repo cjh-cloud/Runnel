@@ -285,10 +285,6 @@ class LibraryPage extends StatelessWidget {
 
           final artist = artists[index - 1];
           final albumCount = artist.albums?.length ?? 0;
-          final trackCount = artist.albums?.fold<int>(
-                0,
-                (int sum, album) => sum + ((album.tracks?.length ?? 0) as int),
-              ) ?? 0;
 
           return Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -308,7 +304,7 @@ class LibraryPage extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Text(
-                '$albumCount ${albumCount == 1 ? 'album' : 'albums'} • $trackCount ${trackCount == 1 ? 'track' : 'tracks'}',
+                '$albumCount ${albumCount == 1 ? 'album' : 'albums'}',
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () {

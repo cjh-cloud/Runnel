@@ -9,6 +9,9 @@ abstract class LibraryRepository {
   /// Scan a bucket and discover all music content
   Future<Either<Failure, List<Artist>>> scanBucket(String bucketName, String region);
   
+  /// Load full details (tracks) for a specific artist
+  Future<Either<Failure, Artist>> loadArtistDetails(Artist artist);
+
   /// Get all configured buckets
   Future<Either<Failure, List<BucketConfig>>> getBuckets();
   

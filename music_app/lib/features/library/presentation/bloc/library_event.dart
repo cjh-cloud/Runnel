@@ -67,3 +67,12 @@ class DeleteBucketEvent extends LibraryEvent {
 }
 
 class LoadBucketsEvent extends LibraryEvent {}
+
+class LoadArtistDetailsEvent extends LibraryEvent {
+  final Artist artist;
+
+  const LoadArtistDetailsEvent(this.artist);
+
+  @override
+  List<Object?> get props => [artist];
+}

@@ -13,6 +13,7 @@ import '../../features/library/data/datasources/library_remote_data_source_impl.
 import '../../features/library/data/repositories/library_repository_impl.dart';
 import '../../features/library/domain/repositories/library_repository.dart';
 import '../../features/library/domain/usecases/scan_bucket.dart';
+import '../../features/library/domain/usecases/load_artist_details.dart';
 import '../../features/library/presentation/bloc/library_bloc.dart';
 import '../../features/library/domain/entities/track.dart';
 import '../../features/library/domain/entities/album.dart';
@@ -64,12 +65,14 @@ void _registerLibraryFeature() {
   sl.registerFactory(
     () => LibraryBloc(
       scanBucket: sl(),
+      loadArtistDetails: sl(),
       repository: sl(),
     ),
   );
 
   // Use cases
   sl.registerLazySingleton(() => ScanBucket(sl()));
+  sl.registerLazySingleton(() => LoadArtistDetails(sl()));
 
   // Repository
   sl.registerLazySingleton<LibraryRepository>(

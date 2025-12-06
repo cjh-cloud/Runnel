@@ -16,16 +16,27 @@ class S3Object {
   });
 }
 
+class S3ListResult {
+  final List<S3Object> objects;
+  final List<String> commonPrefixes;
+
+  S3ListResult({
+    this.objects = const [],
+    this.commonPrefixes = const [],
+  });
+}
+
 /// Wrapper around HTTP client for public S3 bucket operations
 class S3Client {
   final Dio _dio = Dio();
 
   /// List objects in a public S3 bucket
-  Future<List<S3Object>> listObjects({
+  Future<S3ListResult> listObjects({
     required String bucketName,
     required String region,
     String? prefix,
     bool recursive = true,
+    String? delimiter,
   }) async {
     // Try multiple URL formats for public bucket access
     final urlsToTry = [
@@ -43,61 +54,86 @@ class S3Client {
       try {
         print('🔍 S3 Request attempt ${i + 1}/${ urlsToTry.length} ($urlType): $bucketUrl');
         
-        final params = <String, dynamic>{
-          'list-type': '2', // Use ListObjectsV2
-        };
-        
-        if (prefix != null && prefix.isNotEmpty) {
-          params['prefix'] = prefix;
-        }
-        
-        if (!recursive) {
-          params['delimiter'] = '/';
-        }
+        final allObjects = <S3Object>[];
+        final allPrefixes = <String>[];
+        String? continuationToken;
+        bool isTruncated = false;
 
-        print('   Parameters: $params');
-
-        final response = await _dio.get(
-          bucketUrl,
-          queryParameters: params,
-          options: Options(
-            headers: {
-              'Accept': 'application/xml',
-            },
-            followRedirects: true,
-            maxRedirects: 5,
-            validateStatus: (status) => status! < 500,
-          ),
-        );
-
-        print('📡 S3 Response: ${response.statusCode}');
-        print('   Content-Type: ${response.headers.value('content-type')}');
-        print('   Content-Length: ${response.headers.value('content-length')}');
-
-        if (response.statusCode != 200) {
-          final responsePreview = response.data?.toString().substring(
-            0, 
-            response.data.toString().length > 500 ? 500 : response.data.toString().length
-          ) ?? 'No response body';
+        do {
+          final params = <String, dynamic>{
+            'list-type': '2', // Use ListObjectsV2
+          };
           
-          print('⚠️  Non-200 response: $responsePreview');
-          
-          if (i < urlsToTry.length - 1) {
-            print('   Trying next URL format...');
-            continue; // Try next URL
+          if (prefix != null && prefix.isNotEmpty) {
+            params['prefix'] = prefix;
           }
           
-          throw S3Exception(
-            'Failed to list objects. Status: ${response.statusCode}. '
-            'Bucket: "$bucketName", Region: "$region". '
-            'Response: $responsePreview',
-          );
-        }
+          if (!recursive || delimiter != null) {
+            params['delimiter'] = delimiter ?? '/';
+          }
 
-        final objects = _parseListObjectsResponse(response.data);
-        print('✅ Success with $urlType format! Found ${objects.length} objects');
+          if (continuationToken != null) {
+            params['continuation-token'] = continuationToken;
+          }
+  
+          print('   Parameters: $params');
+  
+          final response = await _dio.get(
+            bucketUrl,
+            queryParameters: params,
+            options: Options(
+              headers: {
+                'Accept': 'application/xml',
+              },
+              followRedirects: true,
+              maxRedirects: 5,
+              validateStatus: (status) => status! < 500,
+            ),
+          );
+  
+          print('📡 S3 Response: ${response.statusCode}');
+          
+          if (response.statusCode != 200) {
+            final responsePreview = response.data?.toString().substring(
+              0, 
+              response.data.toString().length > 500 ? 500 : response.data.toString().length
+            ) ?? 'No response body';
+            
+            print('⚠️  Non-200 response: $responsePreview');
+            
+            if (i < urlsToTry.length - 1) {
+              print('   Trying next URL format...');
+              continue; // Try next URL
+            }
+            
+            throw S3Exception(
+              'Failed to list objects. Status: ${response.statusCode}. '
+              'Bucket: "$bucketName", Region: "$region". '
+              'Response: $responsePreview',
+            );
+          }
+  
+          final result = _parseListObjectsResponse(response.data);
+          allObjects.addAll(result.objects);
+          allPrefixes.addAll(result.commonPrefixes);
+          
+          // Check for truncation and continuation token
+          final document = XmlDocument.parse(response.data);
+          final isTruncatedElement = document.findAllElements('IsTruncated').firstOrNull;
+          isTruncated = isTruncatedElement?.innerText == 'true';
+          
+          final tokenElement = document.findAllElements('NextContinuationToken').firstOrNull;
+          continuationToken = tokenElement?.innerText;
+          
+          if (isTruncated) {
+             print('   Response truncated, fetching next page...');
+          }
+
+        } while (isTruncated && continuationToken != null);
+
+        print('✅ Success with $urlType format! Found ${allObjects.length} objects and ${allPrefixes.length} prefixes');
         
-        return objects;
+        return S3ListResult(objects: allObjects, commonPrefixes: allPrefixes);
         
       } on DioException catch (e) {
         print('❌ DioException (attempt ${i + 1}): ${e.type}');
@@ -149,17 +185,18 @@ class S3Client {
   }
 
   /// Parse S3 XML response to list of objects
-  List<S3Object> _parseListObjectsResponse(String xmlData) {
+  S3ListResult _parseListObjectsResponse(String xmlData) {
     try {
-      print('📄 Parsing XML response (length: ${xmlData.length} chars)');
+      // print('📄 Parsing XML response (length: ${xmlData.length} chars)');
       
       if (xmlData.isEmpty) {
         print('⚠️  Warning: Empty XML response');
-        return [];
+        return S3ListResult();
       }
       
       final document = XmlDocument.parse(xmlData);
       final objects = <S3Object>[];
+      final prefixes = <String>[];
 
       // Check if response contains an error
       final errorElements = document.findAllElements('Error');
@@ -171,7 +208,7 @@ class S3Client {
       }
 
       final contentElements = document.findAllElements('Contents');
-      print('   Found ${contentElements.length} Content elements');
+      // print('   Found ${contentElements.length} Content elements');
 
       for (final content in contentElements) {
         try {
@@ -189,8 +226,18 @@ class S3Client {
           continue; // Skip malformed objects
         }
       }
+      
+      final prefixElements = document.findAllElements('CommonPrefixes');
+      for (final prefix in prefixElements) {
+        try {
+          final p = prefix.findElements('Prefix').first.innerText;
+          prefixes.add(p);
+        } catch (e) {
+           print('⚠️  Warning: Failed to parse prefix: $e');
+        }
+      }
 
-      return objects;
+      return S3ListResult(objects: objects, commonPrefixes: prefixes);
     } catch (e, stackTrace) {
       print('❌ XML Parsing error: $e');
       print('   XML preview: ${xmlData.substring(0, xmlData.length > 200 ? 200 : xmlData.length)}...');

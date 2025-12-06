@@ -52,6 +52,42 @@ class LibraryRepositoryImpl implements LibraryRepository {
   }
 
   @override
+  Future<Either<Failure, Artist>> loadArtistDetails(Artist artist) async {
+    try {
+      if (!await networkInfo.isConnected) {
+        return Left(NetworkFailure('No internet connection'));
+      }
+
+      final updatedArtist = await remoteDataSource.loadArtistDetails(artist);
+
+      // Update cache
+      try {
+        final cachedArtists = await localDataSource.getCachedArtists();
+        final index = cachedArtists.indexWhere((a) => a.id == artist.id);
+        
+        if (index >= 0) {
+          cachedArtists[index] = updatedArtist;
+        } else {
+          cachedArtists.add(updatedArtist);
+        }
+        
+        await localDataSource.cacheArtists(cachedArtists);
+      } catch (e) {
+        // Log cache error but don't fail the operation since we have the data
+        print('⚠️ Failed to update cache for artist ${artist.name}: $e');
+      }
+
+      return Right(updatedArtist);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } on NetworkException catch (e) {
+      return Left(NetworkFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Unexpected error: ${e.toString()}'));
+    }
+  }
+
+  @override
   Future<Either<Failure, List<Artist>>> getCachedArtists() async {
     try {
       final artists = await localDataSource.getCachedArtists();

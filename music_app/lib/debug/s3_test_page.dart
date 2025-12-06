@@ -48,9 +48,9 @@ class _S3TestPageState extends State<S3TestPage> {
       );
 
       setState(() {
-        objects = result.map((obj) => obj.key).toList();
-        status = '✅ Success! Found ${result.length} objects';
-        debugLogs.add('✅ Successfully received ${result.length} objects');
+        objects = result.objects.map((obj) => obj.key).toList();
+        status = '✅ Success! Found ${result.objects.length} objects';
+        debugLogs.add('✅ Successfully received ${result.objects.length} objects');
         isLoading = false;
       });
     } catch (e, stackTrace) {

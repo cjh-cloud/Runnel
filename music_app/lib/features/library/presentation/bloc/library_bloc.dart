@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'package:music_app/features/library/domain/entities/artist.dart';
 import 'package:music_app/features/library/domain/entities/bucket_config.dart';
 import 'package:music_app/features/library/domain/usecases/scan_bucket.dart';
+import 'package:music_app/features/library/domain/usecases/load_artist_details.dart';
 import 'package:music_app/features/library/domain/repositories/library_repository.dart';
 import 'package:music_app/core/errors/failures.dart';
 
@@ -11,10 +12,12 @@ part 'library_state.dart';
 
 class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
   final ScanBucket scanBucket;
+  final LoadArtistDetails loadArtistDetails;
   final LibraryRepository repository;
 
   LibraryBloc({
     required this.scanBucket,
+    required this.loadArtistDetails,
     required this.repository,
   }) : super(LibraryInitial()) {
     on<LoadLibraryEvent>(_onLoadLibrary);
@@ -24,6 +27,7 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
     on<AddBucketEvent>(_onAddBucket);
     on<SwitchBucketEvent>(_onSwitchBucket);
     on<DeleteBucketEvent>(_onDeleteBucket);
+    on<LoadArtistDetailsEvent>(_onLoadArtistDetails);
   }
 
   Future<void> _onLoadLibrary(
@@ -275,6 +279,35 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
         ));
       }
     }
+  }
+
+  Future<void> _onLoadArtistDetails(
+    LoadArtistDetailsEvent event,
+    Emitter<LibraryState> emit,
+  ) async {
+    final result = await loadArtistDetails(event.artist);
+    
+    result.fold(
+      (failure) {
+         print("Failed to load artist details: ${_mapFailureToMessage(failure)}");
+      },
+      (updatedArtist) {
+        if (state is LibraryLoaded) {
+          final currentState = state as LibraryLoaded;
+          final updatedArtists = List<Artist>.from(currentState.artists);
+          final index = updatedArtists.indexWhere((a) => a.id == updatedArtist.id);
+          
+          if (index != -1) {
+            updatedArtists[index] = updatedArtist;
+            emit(LibraryLoaded(
+              artists: updatedArtists,
+              buckets: currentState.buckets,
+              currentBucket: currentState.currentBucket,
+            ));
+          }
+        }
+      },
+    );
   }
 
   String _mapFailureToMessage(Failure failure) {
