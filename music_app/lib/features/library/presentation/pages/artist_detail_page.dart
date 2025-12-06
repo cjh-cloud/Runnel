@@ -163,12 +163,6 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
                                     context.read<PlayerBloc>().add(
                                       PlayQueue(tracks, bucketUrl: bucketUrl),
                                     );
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Playing: ${album.name}'),
-                                        duration: const Duration(seconds: 2),
-                                      ),
-                                    );
                                   },
                                 ),
                               // Download album button
@@ -286,12 +280,6 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
                                               // Play the entire album queue starting from this track
                                               context.read<PlayerBloc>().add(
                                                 PlayQueue(tracks, startIndex: trackIndex, bucketUrl: bucketUrl),
-                                              );
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(
-                                                  content: Text('🎵 Playing: ${track.title}'),
-                                                  duration: const Duration(seconds: 2),
-                                                ),
                                               );
                                             },
                                           ),
